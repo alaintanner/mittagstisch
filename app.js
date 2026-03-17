@@ -178,11 +178,9 @@ const SP = {
 
   async saveSettings(key, val) {
     const wert = JSON.stringify(val);
-    try {
-      const items = await SP.getItems(SP.lists.einstellungen, 'ID,Title', `Title eq '${key}'`);
-      if (items.length) await SP.updateItem(SP.lists.einstellungen, items[0].ID, { Wert:wert });
-      else              await SP.createItem(SP.lists.einstellungen, { Title:key, Wert:wert });
-    } catch(e) { console.warn('saveSettings:', e); }
+    const items = await SP.getItems(SP.lists.einstellungen, 'ID,Title', `Title eq '${key}'`);
+    if (items.length) await SP.updateItem(SP.lists.einstellungen, items[0].ID, { Wert:wert });
+    else              await SP.createItem(SP.lists.einstellungen, { Title:key, Wert:wert });
   },
 
   kindToSP(k) {
@@ -1416,7 +1414,7 @@ function buildUserRaumChecks(currRaumIds=[]) {
   });
 }
 
-function saveUser() {
+async function saveUser() {
   const username=document.getElementById('user-username').value.trim();
   const displayName=document.getElementById('user-display').value.trim();
   const password=document.getElementById('user-password').value;
@@ -1432,12 +1430,14 @@ function saveUser() {
     const u=State.users.find(x=>x.id===editId);
     u.username=username;u.displayName=displayName;u.role=role;u.schulhausIds=schulhausIds;u.raumIds=raumIds;
     if(password)u.passwordHash=hashPw(password);
-    toast('Gespeichert ✓');
   } else {
     State.users.push({id:uid(),username,displayName,passwordHash:hashPw(password),role,schulhausIds,raumIds});
-    toast(`${displayName} hinzugefügt ✓`);
   }
-  spSave('users',State.users);hideModal('modal-user');renderUserListe();renderBoard();
+  try {
+    if(CONFIG.mode==='sharepoint') await SP.saveSettings('users',State.users); else save();
+  } catch(e) { toast('Fehler beim Speichern ✗'); return; }
+  toast(editId?'Gespeichert ✓':`${displayName} hinzugefügt ✓`);
+  hideModal('modal-user');renderUserListe();renderBoard();
 }
 
 function deleteUser(id) {
