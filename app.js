@@ -229,18 +229,18 @@ const SESSION_KEY = 'mittagstisch_session';
 
 function saveSession() {
   if (Session.user) {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+    localStorage.setItem(SESSION_KEY, JSON.stringify({
       userId: Session.user.id,
       activeSchulhausId: Session.activeSchulhausId
     }));
   } else {
-    sessionStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(SESSION_KEY);
   }
 }
 
 function restoreSession() {
   try {
-    const raw = sessionStorage.getItem(SESSION_KEY);
+    const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return false;
     const s = JSON.parse(raw);
     const user = State.users.find(u => u.id === s.userId);
@@ -1727,7 +1727,7 @@ function initModals(){
   document.getElementById('btn-add-user').addEventListener('click',()=>openUserModal());
   document.getElementById('modal-user-close').addEventListener('click',()=>hideModal('modal-user'));
   document.getElementById('modal-user-cancel').addEventListener('click',()=>hideModal('modal-user'));
-  document.getElementById('modal-user-save').addEventListener('click',saveUser);
+  document.getElementById('modal-user-save').addEventListener('click',async()=>{try{await saveUser();}catch(e){toast('Fehler beim Speichern ✗');console.error(e);}});
   document.getElementById('modal-user').addEventListener('click',e=>{if(e.target===e.currentTarget)hideModal('modal-user');});
   // ESC
   document.addEventListener('keydown',e=>{if(e.key==='Escape')['modal-kind','modal-raum','modal-schulhaus','modal-user'].forEach(id=>hideModal(id));});
