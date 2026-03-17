@@ -2235,7 +2235,25 @@ function deleteUser(id) {
    EXCEL-IMPORT
    ══════════════════════════════════════════════ */
 let pendingImport=[];
-function fc(row,...cands){const k=Object.keys(row);for(const c of cands){const f=k.find(k=>k.trim().toLowerCase()===c.toLowerCase());if(f!==undefined)return String(row[f]||'').trim();}return '';}
+function normalizeHeader(str=''){
+  return String(str)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9]/g,'');
+}
+function fc(row,...cands){
+  const keys=Object.keys(row);
+  const candsNorm=cands.map(c=>normalizeHeader(c));
+  for(const key of keys){
+    const keyNorm=normalizeHeader(key);
+    if(candsNorm.includes(keyNorm)){
+      const value=row[key];
+      return String(value===undefined||value===null?'':value).trim();
+    }
+  }
+  return '';
+}
 function fcBool(row,...cands){const v=fc(row,...cands).toLowerCase();return v==='1'||v==='ja'||v==='x'||v==='true'||v==='yes';}
 
 function initUpload() {
@@ -2269,22 +2287,22 @@ function processFile(file) {
       const wb=XLSX.read(e.target.result,{type:'binary'});
       const ws=wb.Sheets[wb.SheetNames[0]];
 
-      // Header-Zeile automatisch erkennen: suche Zeile mit 'Vorname' oder 'Schulhaus'
+      // Header-Zeile automatisch erkennen: suche Zeile mit Schlüsselspalten
       const range=XLSX.utils.decode_range(ws['!ref']||'A1');
       let headerRow=0; // 0-basiert
+      const headerTokens=['vorname','firstname','nachname','lastname','schulhaus','school'];
       for(let r=range.s.r; r<=Math.min(range.s.r+5, range.e.r); r++){
         for(let c=range.s.c; c<=range.e.c; c++){
           const cell=ws[XLSX.utils.encode_cell({r,c})];
-          if(cell&&typeof cell.v==='string'&&['vorname','schulhaus'].includes(cell.v.trim().toLowerCase())){
+          if(cell&&typeof cell.v==='string'&&headerTokens.includes(normalizeHeader(cell.v))){
             headerRow=r; break;
           }
         }
         if(headerRow===r&&headerRow>0) break;
-        // Nochmal prüfen ob wir gefunden haben
         let found=false;
         for(let c=range.s.c;c<=range.e.c;c++){
           const cell=ws[XLSX.utils.encode_cell({r,c})];
-          if(cell&&typeof cell.v==='string'&&['vorname','schulhaus'].includes(cell.v.trim().toLowerCase())){found=true;break;}
+          if(cell&&typeof cell.v==='string'&&headerTokens.includes(normalizeHeader(cell.v))){found=true;break;}
         }
         if(found){headerRow=r;break;}
       }
@@ -2301,26 +2319,26 @@ function parseRows(rows,filename) {
 
   // Global-Admin: Schulhäuser aus Excel auto-erstellen wenn noch nicht vorhanden
   if(isGlobalAdmin()){
-    const neueSH=[...new Set(rows.map(row=>fc(row,'schulhaus','school')).filter(Boolean))];
+    const neueSH=[...new Set(rows.map(row=>fc(row,'schulhaus','school','schulhausname')).filter(Boolean))];
     neueSH.forEach(name=>{
       if(!State.schulhaeuser.find(s=>s.name.toLowerCase()===name.toLowerCase())){
         State.schulhaeuser.push({id:uid(),name,ort:''});
       }
     });
-    save();
+    if(CONFIG.mode!=='sharepoint') save();
     buildSchulhausSelector();
     buildSchulhausSelectorAdmin();
   }
 
   pendingImport=rows.map(row=>{
-    const shName=fc(row,'schulhaus','school');
-    const vorname=fc(row,'vorname','firstname');
-    const nachname=fc(row,'nachname','lastname','name');
+    const shName=fc(row,'schulhaus','school','schulhausname');
+    const vorname=fc(row,'vorname','firstname','first name');
+    const nachname=fc(row,'nachname','lastname','last name','name');
     const klasse=fc(row,'klasse','class');
-    const lehrperson=fc(row,'lehrperson','teacher');
-    const bemerkungen=fc(row,'bemerkungen','bemerkung','note');
-    const standardRaumName=fc(row,'standardraum','raum','room');
-    const tage=[1,2,3,4,5].filter(d=>fcBool(row,DAYS[d]));
+    const lehrperson=fc(row,'lehrperson','teacher','klassenlehrperson');
+    const bemerkungen=fc(row,'bemerkungen','bemerkung','note','notes');
+    const standardRaumName=fc(row,'standardraum','standard raum','raum','room');
+    const tage=[1,2,3,4,5].filter(d=>fcBool(row,DAYS[d], d===1?'montag':'',d===2?'dienstag':'',d===3?'mittwoch':'',d===4?'donnerstag':'',d===5?'freitag':''));
     const myAdminIds = isGlobalAdmin() ? State.schulhaeuser.map(s=>s.id) : mySchulhaeuser().map(s=>s.id);
     let sh=State.schulhaeuser.find(s=>s.name.toLowerCase()===shName.toLowerCase());
     if(!sh && myAdminIds.length===1) sh=State.schulhaeuser.find(s=>s.id===myAdminIds[0]);
@@ -2363,61 +2381,74 @@ function parseRows(rows,filename) {
 
 function clearUpload(){pendingImport=[];document.getElementById('upload-preview').hidden=true;document.getElementById('file-input').value='';}
 
-function confirmImport() {
+async function confirmImport() {
   const mode=document.querySelector('input[name="import-mode"]:checked').value;
   const valid=pendingImport.filter(r=>r._valid);
   if(!valid.length){alert('Keine gültigen Einträge.');return;}
   if(mode==='replace'&&!confirm('Alle bestehenden Kinder dieses Schulhauses löschen?'))return;
   const btn=document.getElementById('btn-confirm-import');btn.disabled=true;
+  loader(true);
   try{
     if(mode==='replace'){
-      const shId = activeSchulhaus()?.id;
-      if(shId) State.kinder=State.kinder.filter(k=>k.schulhausId!==shId);
-      else { const myIds=activeSchulhausIds(); State.kinder=State.kinder.filter(k=>!myIds.includes(k.schulhausId)); }
+      const targetIds = activeSchulhaus()?.id ? [activeSchulhaus().id] : activeSchulhausIds();
+      const toDelete = State.kinder.filter(k=>targetIds.includes(k.schulhausId));
+      if(CONFIG.mode==='sharepoint'){
+        await Promise.all(toDelete.filter(k=>k._spId).map(k=>spDeleteKind(k._spId)));
+      }
+      State.kinder=State.kinder.filter(k=>!targetIds.includes(k.schulhausId));
+    }
+
+    // Neu erkannte Schulhäuser in SharePoint speichern
+    if(CONFIG.mode==='sharepoint'){
+      for(const sh of State.schulhaeuser){
+        if(!sh._spId) await spSaveSchulhaus(sh);
+      }
     }
 
     let neu=0, aktualisiert=0;
-    valid.forEach(r=>{
+    for(const r of valid){
       if(r._isDup && mode!=='replace'){
-        // Duplikat: bestehenden Eintrag mit neuen Werten ergänzen/überschreiben
         const existing=State.kinder.find(k=>
           k.vorname.toLowerCase()===r.vorname.toLowerCase()&&
           k.nachname.toLowerCase()===r.nachname.toLowerCase()&&
           k.schulhausId===r.schulhausId
         );
         if(existing){
-          // Felder nur überschreiben wenn in Excel vorhanden (nicht leer)
           if(r.klasse)       existing.klasse=r.klasse;
           if(r.lehrperson)   existing.lehrperson=r.lehrperson;
           if(r.bemerkungen)  existing.bemerkungen=r.bemerkungen;
           if(r.tage&&r.tage.length) existing.tage=r.tage;
           if(r.standardRaumId&&r.standardRaumId!=='0'){
+            const oldStandard = existing.standardRaumId;
             existing.standardRaumId=r.standardRaumId;
-            // Aktuellen Raum nur anpassen wenn Kind noch in Abwesend/Standardraum
-            if(existing.raumId==='0'||existing.raumId===existing.standardRaumId){
+            if(existing.raumId==='0'||existing.raumId===oldStandard){
               existing.raumId=r.standardRaumId;
             }
           }
+          if(CONFIG.mode==='sharepoint') await spSaveKind(existing);
           aktualisiert++;
         }
       } else {
-        // Neuer Eintrag (oder replace-Modus)
-        State.kinder.push({
+        const k={
           id:uid(),vorname:r.vorname,nachname:r.nachname,
           klasse:r.klasse,lehrperson:r.lehrperson,bemerkungen:r.bemerkungen,
           schulhausId:r.schulhausId,standardRaumId:r.standardRaumId||'0',
           raumId:r.standardRaumId||'0',hatGegessen:false,tage:r.tage
-        });
+        };
+        State.kinder.push(k);
+        if(CONFIG.mode==='sharepoint') await spSaveKind(k);
         neu++;
       }
-    });
+    }
 
-    save();clearUpload();buildKinderFilters();renderKinderTable();renderBoard();
+    if(CONFIG.mode!=='sharepoint') save();
+    clearUpload();buildKinderFilters();renderKinderTable();renderBoard();
     const msg=mode==='replace'
       ? `${neu} Kinder importiert ✓`
       : `${neu} neu, ${aktualisiert} aktualisiert ✓`;
     toast(msg);
-  }catch(e){toast('Fehler: '+e.message);}finally{btn.disabled=false;}
+  }catch(e){toast('Fehler: '+e.message);}
+  finally{loader(false);btn.disabled=false;}
 }
 
 /* ══════════════════════════════════════════════
