@@ -779,7 +779,7 @@ details[open] .upload-summary::before{transform:rotate(90deg)}
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
 <script>
 /* ══════════════════════════════════════════════
    ╔══════════════════════════════════════════╗
@@ -799,8 +799,8 @@ const CONFIG = {
 
   sharepoint: {
     siteUrl:  'https://tannerone.sharepoint.com/sites/vsl',
-    clientId: 'db3df286-8b33-4e88-86b0-77435f625d17',
-    tenantId: 'ed4ab287-2efb-4ea1-8e00-c817f9f69b3f',
+    clientId: 'db3df286-8b33-4e88-86b0-77435f625d17',     // ← aus Azure AD App-Registrierung eintragen
+    tenantId: 'ed4ab287-2efb-4ea1-8e00-c817f9f69b3f',  // ← aus Azure AD → Übersicht → Verzeichnis-ID
     lists: {
       kinder:        'Mittagstisch_Kinder',
       raeume:        'Mittagstisch_Raeume',
