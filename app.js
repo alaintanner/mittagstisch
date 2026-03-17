@@ -167,6 +167,12 @@ const SP = {
           if (e.Title==='users')    State.users    = val;
         } catch{}
       });
+      // Migrate: ensure every user has a valid id (old data may lack it due to JSON serialisation of undefined)
+      const missingIds = State.users.some(u => !u.id);
+      if (missingIds) {
+        State.users.forEach(u => { if (!u.id) u.id = uid(); });
+        await SP.saveSettings('users', State.users);
+      }
       if (!State.users.some(u=>u.role==='global-admin')) {
         State.users.push({ id:uid(), username:'admin', displayName:'Administrator',
           passwordHash:hashPw('admin123'), role:'global-admin', schulhausIds:[], raumIds:[] });
@@ -259,6 +265,11 @@ function load() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) State = { ...State, ...JSON.parse(raw) };
   } catch(e) {}
+  // Migrate: ensure every user has a valid id (old data may lack it due to JSON serialisation of undefined)
+  if (State.users.some(u => !u.id)) {
+    State.users.forEach(u => { if (!u.id) u.id = uid(); });
+    save();
+  }
   if (!State.users.some(u => u.role === 'global-admin')) {
     State.users.push({ id:uid(), username:'admin', displayName:'Administrator',
       passwordHash:hashPw('admin123'), role:'global-admin', schulhausIds:[], raumIds:[] });
@@ -1365,6 +1376,7 @@ function openUserModal(editId=null) {
   document.getElementById('pw-hint').style.display=editId?'':'none';
   if(editId){
     const u=State.users.find(x=>x.id===editId);
+    if(!u){console.error('openUserModal: user not found', editId);return;}
     document.getElementById('user-username').value=u.username;
     document.getElementById('user-display').value=u.displayName;
     document.getElementById('user-password').value='';
