@@ -779,7 +779,7 @@ details[open] .upload-summary::before{transform:rotate(90deg)}
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
 <script>
 /* ══════════════════════════════════════════════
    ╔══════════════════════════════════════════╗
@@ -799,8 +799,8 @@ const CONFIG = {
 
   sharepoint: {
     siteUrl:  'https://tannerone.sharepoint.com/sites/vsl',
-    clientId: 'db3df286-8b33-4e88-86b0-77435f625d17',     // ← aus Azure AD App-Registrierung eintragen
-    tenantId: 'ed4ab287-2efb-4ea1-8e00-c817f9f69b3f',  // ← aus Azure AD → Übersicht → Verzeichnis-ID
+    clientId: 'db3df286-8b33-4e88-86b0-77435f625d17',
+    tenantId: 'ed4ab287-2efb-4ea1-8e00-c817f9f69b3f',
     lists: {
       kinder:        'Mittagstisch_Kinder',
       raeume:        'Mittagstisch_Raeume',
@@ -825,7 +825,7 @@ function initMsal() {
       authority:   `https://login.microsoftonline.com/${CONFIG.sharepoint.tenantId}`,
       redirectUri: window.location.origin + window.location.pathname,
     },
-    cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true }
+    cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false }
   });
 }
 
@@ -1814,7 +1814,7 @@ function buildKindRaumSel(schulhausId, selectedRaumId='0') {
   raumSel.value=selectedRaumId||'0';
 }
 
-async function saveKind() {
+function saveKind() {
   const vorname=document.getElementById('kind-vorname').value.trim();
   const nachname=document.getElementById('kind-nachname').value.trim();
   const klasse=document.getElementById('kind-klasse').value.trim();
@@ -1828,25 +1828,24 @@ async function saveKind() {
   if(editId){
     const k=State.kinder.find(x=>x.id===editId);
     Object.assign(k,{vorname,nachname,klasse,lehrperson,bemerkungen,schulhausId,standardRaumId,tage});
-    if(CONFIG.mode==='sharepoint') await spSaveKind(k); else save();
     toast('Gespeichert ✓');
   } else {
-    const k={id:uid(),vorname,nachname,klasse,lehrperson,bemerkungen,
-      schulhausId,standardRaumId,raumId:standardRaumId,hatGegessen:false,tage};
-    State.kinder.push(k);
-    if(CONFIG.mode==='sharepoint') await spSaveKind(k); else save();
+    State.kinder.push({
+      id:uid(),vorname,nachname,klasse,lehrperson,bemerkungen,
+      schulhausId,standardRaumId,
+      raumId:standardRaumId,  // startet direkt im Standardraum
+      hatGegessen:false,tage
+    });
     toast(`${vorname} ${nachname} hinzugefügt ✓`);
   }
-  hideModal('modal-kind'); buildKinderFilters(); renderKinderTable(); renderBoard();
+  save(); hideModal('modal-kind'); buildKinderFilters(); renderKinderTable(); renderBoard();
 }
 
-async function deleteKind(id) {
+function deleteKind(id) {
   const k=State.kinder.find(x=>x.id===id);if(!k)return;
   if(!confirm(`${k.vorname} ${k.nachname} wirklich löschen?`))return;
-  if(CONFIG.mode==='sharepoint') await spDeleteKind(k._spId); else save();
   State.kinder=State.kinder.filter(x=>x.id!==id);
-  if(CONFIG.mode!=='sharepoint') save();
-  buildKinderFilters(); renderKinderTable(); renderBoard(); toast('Kind gelöscht');
+  save(); buildKinderFilters(); renderKinderTable(); renderBoard(); toast('Kind gelöscht');
 }
 
 /* ══════════════════════════════════════════════
@@ -1905,7 +1904,7 @@ function openRaumModal(editId=null) {
   showModal('modal-raum');setTimeout(()=>lbl.focus(),80);
 }
 
-async function saveRaum() {
+function saveRaum() {
   const label=document.getElementById('raum-label').value.trim();
   const farbe=document.getElementById('raum-color').value;
   const editId=document.getElementById('raum-edit-id').value;
@@ -1917,18 +1916,13 @@ async function saveRaum() {
   if(editId){
     const r=State.raeume.find(x=>x.id===editId);
     r.label=label; r.farbe=farbe; r.schulhausId=schulhausId;
-    if(CONFIG.mode==='sharepoint') await spSaveRaum(r); else save();
     toast('Raum aktualisiert ✓');
-  } else {
-    const r={id:uid(),label,farbe,schulhausId};
-    State.raeume.push(r);
-    if(CONFIG.mode==='sharepoint') await spSaveRaum(r); else save();
-    toast(`${label} hinzugefügt ✓`);
   }
-  hideModal('modal-raum');renderRaeumeListe();renderBoard();
+  else{State.raeume.push({id:uid(),label,farbe,schulhausId});toast(`${label} hinzugefügt ✓`);}
+  save();hideModal('modal-raum');renderRaeumeListe();renderBoard();
 }
 
-async function deleteRaum(id) {
+function deleteRaum(id) {
   const r=State.raeume.find(x=>x.id===id);if(!r)return;
   if(!confirm(`«${r.label}» löschen?`))return;
   // Kinder die diesen Raum als aktuellen Raum haben → Standardraum
@@ -1937,10 +1931,8 @@ async function deleteRaum(id) {
   State.kinder.filter(k=>k.standardRaumId===id).forEach(k=>{k.standardRaumId='0';k.raumId='0';});
   // Benutzer-Raum-Zuweisung bereinigen
   State.users.forEach(u=>{u.raumIds=(u.raumIds||[]).filter(x=>x!==id);});
-  if(CONFIG.mode==='sharepoint') await spDeleteRaum(r._spId); else save();
   State.raeume=State.raeume.filter(x=>x.id!==id);
-  if(CONFIG.mode!=='sharepoint') save();
-  renderRaeumeListe();renderBoard();toast(`${r.label} gelöscht`);
+  save();renderRaeumeListe();renderBoard();toast(`${r.label} gelöscht`);
 }
 
 /* ══════════════════════════════════════════════
@@ -2083,35 +2075,25 @@ function openSchulhausModal(editId=null) {
   showModal('modal-schulhaus');setTimeout(()=>document.getElementById('schulhaus-name').focus(),80);
 }
 
-async function saveSchulhaus() {
+function saveSchulhaus() {
   const name=document.getElementById('schulhaus-name').value.trim();
   const ort=document.getElementById('schulhaus-ort').value.trim();
   const editId=document.getElementById('schulhaus-edit-id').value;
   if(!name){alert('Bitte Namen eingeben.');return;}
-  if(editId){
-    const s=State.schulhaeuser.find(x=>x.id===editId);s.name=name;s.ort=ort;
-    if(CONFIG.mode==='sharepoint') await spSaveSchulhaus(s); else save();
-    toast('Schulhaus aktualisiert ✓');
-  } else {
-    const s={id:uid(),name,ort};
-    State.schulhaeuser.push(s);
-    if(CONFIG.mode==='sharepoint') await spSaveSchulhaus(s); else save();
-    toast(`${name} hinzugefügt ✓`);
-  }
-  hideModal('modal-schulhaus');renderSchulhausGrid();
+  if(editId){const s=State.schulhaeuser.find(x=>x.id===editId);s.name=name;s.ort=ort;toast('Schulhaus aktualisiert ✓');}
+  else{State.schulhaeuser.push({id:uid(),name,ort});toast(`${name} hinzugefügt ✓`);}
+  save();hideModal('modal-schulhaus');renderSchulhausGrid();
 }
 
-async function deleteSchulhaus(id) {
+function deleteSchulhaus(id) {
   const s=State.schulhaeuser.find(x=>x.id===id);if(!s)return;
   const n=State.kinder.filter(k=>k.schulhausId===id).length;
   if(!confirm(`«${s.name}» löschen?${n?` ${n} Kinder werden ebenfalls gelöscht.`:''}`))return;
-  if(CONFIG.mode==='sharepoint') await spDeleteSchulhaus(s._spId);
   State.schulhaeuser=State.schulhaeuser.filter(x=>x.id!==id);
   State.kinder=State.kinder.filter(k=>k.schulhausId!==id);
   State.raeume=State.raeume.filter(r=>r.schulhausId!==id);
   State.mitarbeitende=State.mitarbeitende.filter(m=>m.schulhausId!==id);
-  if(CONFIG.mode!=='sharepoint') save();
-  renderSchulhausGrid();renderBoard();toast(`${s.name} gelöscht`);
+  save();renderSchulhausGrid();renderBoard();toast(`${s.name} gelöscht`);
 }
 
 /* ══════════════════════════════════════════════
@@ -2220,7 +2202,7 @@ function saveUser() {
     State.users.push({id:uid(),username,displayName,passwordHash:hashPw(password),role,schulhausIds,raumIds});
     toast(`${displayName} hinzugefügt ✓`);
   }
-  spSave('users',State.users);hideModal('modal-user');renderUserListe();renderBoard();
+  save();hideModal('modal-user');renderUserListe();renderBoard();
 }
 
 function deleteUser(id) {
@@ -2228,7 +2210,7 @@ function deleteUser(id) {
   if(u.id===Session.user?.id){alert('Du kannst dich nicht selbst löschen.');return;}
   if(!confirm(`${u.displayName} wirklich löschen?`))return;
   State.users=State.users.filter(x=>x.id!==id);
-  spSave('users',State.users);renderUserListe();toast('Benutzer gelöscht');
+  save();renderUserListe();toast('Benutzer gelöscht');
 }
 
 /* ══════════════════════════════════════════════
@@ -2239,7 +2221,7 @@ function normalizeHeader(str=''){
   return String(str)
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g,'')
+    .replace(/[̀-ͯ]/g,'')
     .replace(/[^a-z0-9]/g,'');
 }
 function fc(row,...cands){
@@ -2446,19 +2428,14 @@ function confirmImport() {
 function syncThemePickers(){document.querySelectorAll('.color-picker[data-theme]').forEach(p=>{p.value=State.theme[p.dataset.theme]||'#ffffff';});}
 function syncBrandingInputs(){const b=State.branding;document.getElementById('branding-title').value=b.title||'';document.getElementById('branding-subtitle').value=b.subtitle||'';document.getElementById('branding-emoji').value=b.iconEmoji||'';document.getElementById('branding-bg-color').value=b.headerBg||'#141820';document.getElementById('branding-text-color').value=b.headerText||'#eef2f8';applyBranding();}
 
-function spSave(key, val) {
-  if(CONFIG.mode==='sharepoint') SP.saveSettings(key, val).catch(e=>console.warn('spSave:', e));
-  else save();
-}
-
 function initTheme(){
-  document.querySelectorAll('.color-picker[data-theme]').forEach(p=>{p.addEventListener('input',()=>{State.theme[p.dataset.theme]=p.value;applyTheme();spSave('theme',State.theme);});});
-  document.getElementById('btn-reset-theme').addEventListener('click',()=>{if(!confirm('Design zurücksetzen?'))return;State.theme={accentColor:'#1a73e8',eatenColor:'#1e8c4a',pendingColor:'#d93025',warnColor:'#f29900',bgBase:'#f6f8fc',bgSurface:'#ffffff'};applyTheme();syncThemePickers();spSave('theme',State.theme);toast('Design zurückgesetzt');});
+  document.querySelectorAll('.color-picker[data-theme]').forEach(p=>{p.addEventListener('input',()=>{State.theme[p.dataset.theme]=p.value;applyTheme();save();});});
+  document.getElementById('btn-reset-theme').addEventListener('click',()=>{if(!confirm('Design zurücksetzen?'))return;State.theme={accentColor:'#1a73e8',eatenColor:'#1e8c4a',pendingColor:'#d93025',warnColor:'#f29900',bgBase:'#f6f8fc',bgSurface:'#ffffff'};applyTheme();syncThemePickers();save();toast('Design zurückgesetzt');});
 }
 function initBranding(){
-  const update=()=>{State.branding.title=document.getElementById('branding-title').value.trim();State.branding.subtitle=document.getElementById('branding-subtitle').value.trim();State.branding.iconEmoji=document.getElementById('branding-emoji').value.trim()||'🍽️';State.branding.headerBg=document.getElementById('branding-bg-color').value;State.branding.headerText=document.getElementById('branding-text-color').value;applyBranding();spSave('branding',State.branding);};
+  const update=()=>{State.branding.title=document.getElementById('branding-title').value.trim();State.branding.subtitle=document.getElementById('branding-subtitle').value.trim();State.branding.iconEmoji=document.getElementById('branding-emoji').value.trim()||'🍽️';State.branding.headerBg=document.getElementById('branding-bg-color').value;State.branding.headerText=document.getElementById('branding-text-color').value;applyBranding();save();};
   ['branding-title','branding-subtitle','branding-emoji','branding-bg-color','branding-text-color'].forEach(id=>document.getElementById(id).addEventListener('input',update));
-  document.getElementById('btn-reset-branding').addEventListener('click',()=>{if(!confirm('Header zurücksetzen?'))return;State.branding={title:'Mittagstisch',subtitle:'',iconEmoji:'🍽️',headerBg:'#141820',headerText:'#eef2f8'};applyBranding();syncBrandingInputs();spSave('branding',State.branding);toast('Header zurückgesetzt');});
+  document.getElementById('btn-reset-branding').addEventListener('click',()=>{if(!confirm('Header zurücksetzen?'))return;State.branding={title:'Mittagstisch',subtitle:'',iconEmoji:'🍽️',headerBg:'#141820',headerText:'#eef2f8'};applyBranding();syncBrandingInputs();save();toast('Header zurückgesetzt');});
 }
 
 /* ══════════════════════════════════════════════
