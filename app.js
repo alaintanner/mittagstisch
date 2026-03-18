@@ -1375,7 +1375,7 @@ function openUserModal(editId=null) {
   document.getElementById('user-edit-id').value=editId||'';
   document.getElementById('pw-hint').style.display=editId?'':'none';
   if(editId){
-    const u=State.users.find(x=>x.id===editId);
+    const u=State.users.find(x=>String(x.id)===String(editId));
     if(!u){console.error('openUserModal: user not found', editId);return;}
     document.getElementById('user-username').value=u.username;
     document.getElementById('user-display').value=u.displayName;
@@ -1396,7 +1396,7 @@ function buildUserSchulhausChecks(editId) {
   const group=document.getElementById('user-schulhaus-group');
   group.style.display=role==='global-admin'?'none':'';
   const checks=document.getElementById('user-schulhaus-checks');checks.innerHTML='';
-  const u=editId?State.users.find(x=>x.id===editId):null;
+  const u=editId?State.users.find(x=>String(x.id)===String(editId)):null;
   const currShIds=u?.schulhausIds||[];
   const currRaumIds=u?.raumIds||[];
 
@@ -1436,10 +1436,10 @@ async function saveUser() {
   const raumIds=role==='global-admin'?[]:[...document.querySelectorAll('#user-raum-checks input:checked')].map(i=>i.value);
   if(!username||!displayName){alert('Bitte Benutzername und Anzeigename eingeben.');return;}
   if(!editId&&!password){alert('Bitte Passwort eingeben.');return;}
-  const existing=State.users.find(u=>u.username.toLowerCase()===username.toLowerCase()&&u.id!==editId);
+  const existing=State.users.find(u=>u.username.toLowerCase()===username.toLowerCase()&&String(u.id)!==String(editId));
   if(existing){alert('Benutzername bereits vergeben.');return;}
   if(editId){
-    const u=State.users.find(x=>x.id===editId);
+    const u=State.users.find(x=>String(x.id)===String(editId));
     u.username=username;u.displayName=displayName;u.role=role;u.schulhausIds=schulhausIds;u.raumIds=raumIds;
     if(password)u.passwordHash=hashPw(password);
   } else {
@@ -1453,10 +1453,10 @@ async function saveUser() {
 }
 
 function deleteUser(id) {
-  const u=State.users.find(x=>x.id===id);if(!u)return;
-  if(u.id===Session.user?.id){alert('Du kannst dich nicht selbst löschen.');return;}
+  const u=State.users.find(x=>String(x.id)===String(id));if(!u)return;
+  if(String(u.id)===String(Session.user?.id)){alert('Du kannst dich nicht selbst löschen.');return;}
   if(!confirm(`${u.displayName} wirklich löschen?`))return;
-  State.users=State.users.filter(x=>x.id!==id);
+  State.users=State.users.filter(x=>String(x.id)!==String(id));
   spSave('users',State.users);renderUserListe();toast('Benutzer gelöscht');
 }
 
