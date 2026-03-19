@@ -222,7 +222,7 @@ let State = {
   kinder: [],
   mitarbeitende: [],
   users: [],
-  theme: { accentColor:'#1a73e8', eatenColor:'#1e8c4a', pendingColor:'#d93025', warnColor:'#f29900', bgBase:'#f6f8fc', bgSurface:'#ffffff', neuImRaumColor:'#ffa726' },
+  theme: { accentColor:'#1a73e8', eatenColor:'#1e8c4a', pendingColor:'#d93025', warnColor:'#f29900', bgBase:'#f6f8fc', bgSurface:'#ffffff', neuImRaumColor:'#c2e1ff' },
   branding: { title:'Mittagstisch', subtitle:'', iconEmoji:'🍽️', headerBg:'#141820', headerText:'#eef2f8' },
 };
 
@@ -531,8 +531,8 @@ function applyTheme() {
   r.style.setProperty('--clr-green-dim',hexAlpha(t.eatenColor,.13));
   r.style.setProperty('--clr-red-dim',hexAlpha(t.pendingColor,.13));
   r.style.setProperty('--clr-amber-dim',hexAlpha(t.warnColor,.15));
-  r.style.setProperty('--clr-neu-im-raum',t.neuImRaumColor||'#ffa726');
-  r.style.setProperty('--clr-neu-im-raum-dim',hexAlpha(t.neuImRaumColor||'#ffa726',.18));
+  r.style.setProperty('--clr-neu-im-raum',t.neuImRaumColor||'#c2e1ff');
+  r.style.setProperty('--clr-neu-im-raum-dim',hexAlpha(t.neuImRaumColor||'#c2e1ff',.18));
 }
 function applyBranding() {
   const b=State.branding;
@@ -1744,7 +1744,7 @@ function spSave(key, val) {
 
 function initTheme(){
   document.querySelectorAll('.color-picker[data-theme]').forEach(p=>{p.addEventListener('input',()=>{State.theme[p.dataset.theme]=p.value;applyTheme();spSave('theme',State.theme);});});
-  document.getElementById('btn-reset-theme').addEventListener('click',()=>{if(!confirm('Design zurücksetzen?'))return;State.theme={accentColor:'#1a73e8',eatenColor:'#1e8c4a',pendingColor:'#d93025',warnColor:'#f29900',bgBase:'#f6f8fc',bgSurface:'#ffffff',neuImRaumColor:'#ffa726'};applyTheme();syncThemePickers();spSave('theme',State.theme);toast('Design zurückgesetzt');});
+  document.getElementById('btn-reset-theme').addEventListener('click',()=>{if(!confirm('Design zurücksetzen?'))return;State.theme={accentColor:'#1a73e8',eatenColor:'#1e8c4a',pendingColor:'#d93025',warnColor:'#f29900',bgBase:'#f6f8fc',bgSurface:'#ffffff',neuImRaumColor:'#c2e1ff'};applyTheme();syncThemePickers();spSave('theme',State.theme);toast('Design zurückgesetzt');});
 }
 function initBranding(){
   const update=()=>{State.branding.title=document.getElementById('branding-title').value.trim();State.branding.subtitle=document.getElementById('branding-subtitle').value.trim();State.branding.iconEmoji=document.getElementById('branding-emoji').value.trim()||'🍽️';State.branding.headerBg=document.getElementById('branding-bg-color').value;State.branding.headerText=document.getElementById('branding-text-color').value;applyBranding();spSave('branding',State.branding);};
