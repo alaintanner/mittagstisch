@@ -78,10 +78,16 @@ body{background-image:none}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes modalIn{from{opacity:0;transform:scale(0.97) translateY(8px)}to{opacity:1;transform:none}}
 .kanban-board{display:flex;gap:12px;min-width:max-content;align-items:flex-start}
+.kanban-col-group{display:flex;gap:12px;flex-shrink:0;align-items:flex-start}
 .kanban-col{width:480px;flex-shrink:0;border-radius:10px;background:#f1f3f4;border:none;overflow:hidden;box-shadow:none;transition:opacity .2s;scroll-snap-align:start}
 .kanban-col.abwesend-col{width:240px;background:#fff3e0}
 .kanban-col.dimmed{opacity:.3;pointer-events:none}
 .col-accent{height:3px}
+.col-drag-handle{cursor:grab;font-size:16px;color:var(--clr-text-mut);opacity:.5;user-select:none;padding:0 2px;transition:opacity .15s}
+.col-drag-handle:hover{opacity:1}
+.col-drag-handle:active{cursor:grabbing}
+.child-card.neu-im-raum{background:var(--clr-neu-im-raum)!important;box-shadow:0 0 0 2px var(--clr-neu-im-raum),0 2px 8px rgba(0,0,0,.12);cursor:pointer}
+.child-card.neu-im-raum::after{content:'Anklicken wenn angekommen';display:block;font-size:10px;color:rgba(0,0,0,.55);text-align:center;padding:3px 0 0;font-style:italic}
 .col-header{padding:10px 12px 8px;background:transparent;border-bottom:none}
 .col-header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}
 .col-name-row{display:flex;align-items:center;gap:7px}
@@ -355,6 +361,7 @@ details[open] .upload-summary::before{transform:rotate(90deg)}
   /* Kanban: schmalere Spalten */
   .kanban-wrapper{padding:10px 12px}
   .kanban-board{gap:10px}
+  .kanban-col-group{gap:10px}
   .kanban-col{width:360px}
   .kanban-col.abwesend-col{width:200px}
   .col-body{grid-template-columns:1fr 1fr;gap:6px}
@@ -400,6 +407,7 @@ details[open] .upload-summary::before{transform:rotate(90deg)}
   /* Kanban: EINE Spalte pro Raum, scrollbar */
   .kanban-wrapper{padding:8px}
   .kanban-board{gap:8px}
+  .kanban-col-group{gap:8px}
   .kanban-col{width:calc(85vw);min-width:260px;max-width:340px}
   .kanban-col.abwesend-col{width:calc(70vw);min-width:220px;max-width:280px}
   .col-body{grid-template-columns:1fr;gap:6px}
@@ -665,6 +673,7 @@ details[open] .upload-summary::before{transform:rotate(90deg)}
           <div class="theme-row"><div><div class="theme-name">Gegessen</div><div class="theme-desc">Grünton</div></div><input type="color" class="color-picker" data-theme="eatenColor"/></div>
           <div class="theme-row"><div><div class="theme-name">Ausstehend</div><div class="theme-desc">Rotton</div></div><input type="color" class="color-picker" data-theme="pendingColor"/></div>
           <div class="theme-row"><div><div class="theme-name">Warnung</div><div class="theme-desc">Bemerkungen</div></div><input type="color" class="color-picker" data-theme="warnColor"/></div>
+          <div class="theme-row"><div><div class="theme-name">Neu im Raum</div><div class="theme-desc">Kind gerade angekommen</div></div><input type="color" class="color-picker" data-theme="neuImRaumColor"/></div>
           <div class="theme-row"><div><div class="theme-name">Hintergrund</div></div><input type="color" class="color-picker" data-theme="bgBase"/></div>
           <div class="theme-row"><div><div class="theme-name">Oberfläche</div></div><input type="color" class="color-picker" data-theme="bgSurface"/></div>
         </div>

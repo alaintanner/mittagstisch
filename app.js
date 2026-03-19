@@ -141,7 +141,7 @@ const SP = {
     loader(true);
     try {
       const [kindItems, raumItems, shItems, einstItems] = await Promise.all([
-        SP.getItems(SP.lists.kinder,       'ID,Vorname,Nachname,Klasse,Lehrperson,Bemerkungen,SchulhausId,RaumId,StandardRaumId,HatGegessen,Tage'),
+        SP.getItems(SP.lists.kinder,       'ID,Vorname,Nachname,Klasse,Lehrperson,Bemerkungen,SchulhausId,RaumId,StandardRaumId,HatGegessen,Tage,NeuImRaum'),
         SP.getItems(SP.lists.raeume,       'ID,Title,Farbe,SchulhausId'),
         SP.getItems(SP.lists.schulhaeuser, 'ID,Title,Ort'),
         SP.getItems(SP.lists.einstellungen,'ID,Title,Wert'),
@@ -157,6 +157,7 @@ const SP = {
         raumId:String(k.RaumId||'0'),
         standardRaumId:String(k.StandardRaumId||'0'),
         hatGegessen:k.HatGegessen===true||k.HatGegessen==='true'||k.HatGegessen===1,
+        neuImRaum:k.NeuImRaum===true||k.NeuImRaum==='true'||k.NeuImRaum===1,
         tage:(() => { try { return JSON.parse(k.Tage||'[]'); } catch{ return []; } })()
       }));
       einstItems.forEach(e => {
@@ -197,6 +198,7 @@ const SP = {
       RaumId:parseInt(k.raumId)||0,
       StandardRaumId:parseInt(k.standardRaumId)||0,
       HatGegessen:k.hatGegessen,
+      NeuImRaum:!!k.neuImRaum,
       Tage:JSON.stringify(k.tage||[])
     };
   }
@@ -220,7 +222,7 @@ let State = {
   kinder: [],
   mitarbeitende: [],
   users: [],
-  theme: { accentColor:'#1a73e8', eatenColor:'#1e8c4a', pendingColor:'#d93025', warnColor:'#f29900', bgBase:'#f6f8fc', bgSurface:'#ffffff' },
+  theme: { accentColor:'#1a73e8', eatenColor:'#1e8c4a', pendingColor:'#d93025', warnColor:'#f29900', bgBase:'#f6f8fc', bgSurface:'#ffffff', neuImRaumColor:'#ffa726' },
   branding: { title:'Mittagstisch', subtitle:'', iconEmoji:'🍽️', headerBg:'#141820', headerText:'#eef2f8' },
 };
 
@@ -529,6 +531,8 @@ function applyTheme() {
   r.style.setProperty('--clr-green-dim',hexAlpha(t.eatenColor,.13));
   r.style.setProperty('--clr-red-dim',hexAlpha(t.pendingColor,.13));
   r.style.setProperty('--clr-amber-dim',hexAlpha(t.warnColor,.15));
+  r.style.setProperty('--clr-neu-im-raum',t.neuImRaumColor||'#ffa726');
+  r.style.setProperty('--clr-neu-im-raum-dim',hexAlpha(t.neuImRaumColor||'#ffa726',.18));
 }
 function applyBranding() {
   const b=State.branding;
@@ -572,6 +576,13 @@ function showView(id) {
 let boardFilter = 'all';
 let activeDayFilter = 0; // 0=heute automatisch
 let sortables = [];
+
+function getRaumOrder(shId) {
+  try { return JSON.parse(localStorage.getItem('raumOrder_'+(Session.user?.id||'_')+'_'+shId)||'[]'); } catch{ return []; }
+}
+function setRaumOrder(shId, ids) {
+  localStorage.setItem('raumOrder_'+(Session.user?.id||'_')+'_'+shId, JSON.stringify(ids));
+}
 
 function initDayFilter() {
   const today = todayDow();
@@ -626,7 +637,14 @@ function renderBoard() {
     if (!sh) return;
     const shKinder = sichtbareKinder.filter(k=>k.schulhausId===sh.id);
     const myRaeume = State.raeume.filter(r=>r.schulhausId===sh.id);
-    const allRooms = [{id:'0', label:'Abwesend', farbe:'#6b7a90'}, ...myRaeume];
+
+    // Gespeicherte Reihenfolge der Räume für diesen Benutzer anwenden
+    const savedOrder = getRaumOrder(sh.id);
+    const orderedRaeume = savedOrder.length
+      ? [...myRaeume].sort((a,b) => { const ai=savedOrder.indexOf(a.id),bi=savedOrder.indexOf(b.id); return (ai<0?9999:ai)-(bi<0?9999:bi); })
+      : myRaeume;
+    const abwesendRoom = {id:'0', label:'Abwesend', farbe:'#6b7a90'};
+    const allRooms = [abwesendRoom, ...orderedRaeume];
 
     // Schulhaus-Trennlinie bei Alle-Ansicht
     if (schulhausGruppen.length > 1) {
@@ -635,6 +653,11 @@ function renderBoard() {
       sep.innerHTML=`<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-family:var(--fd);font-size:13px;font-weight:600;color:var(--clr-gold);white-space:nowrap;padding:8px 0">🏫 ${esc(sh.name)}</div>`;
       board.appendChild(sep);
     }
+
+    // colGroup nimmt alle Raum-Spalten auf (ohne Abwesend) → ermöglicht Drag-to-Reorder
+    const colGroup = document.createElement('div');
+    colGroup.className = 'kanban-col-group';
+    colGroup.dataset.schulhaus = sh.id;
 
     allRooms.forEach(room => {
       // Abwesend-Spalte: nur Kinder die heute eigentlich da sein sollten (tage enthält activeDayFilter)
@@ -666,7 +689,8 @@ function renderBoard() {
 
       const header = document.createElement('div');
       header.className = 'col-header';
-      header.innerHTML = `<div class="col-header-top"><div class="col-name-row"><div class="col-dot" style="background:${room.farbe};box-shadow:0 0 6px ${room.farbe}"></div><span class="col-label">${esc(room.label)}</span></div><span class="col-count">${kids.length}</span></div>${roomStaff.length?`<div class="col-staff">${roomStaff.map(s=>`<div class="staff-chip"><div class="staff-chip-dot" style="background:${room.farbe}"></div>${esc(s.displayName)}</div>`).join('')}</div>`:''}`;
+      const dragHandle = room.id !== '0' ? `<span class="col-drag-handle" title="Reihenfolge ändern">⠿</span>` : '';
+      header.innerHTML = `<div class="col-header-top"><div class="col-name-row"><div class="col-dot" style="background:${room.farbe};box-shadow:0 0 6px ${room.farbe}"></div><span class="col-label">${esc(room.label)}</span></div><div style="display:flex;align-items:center;gap:6px">${dragHandle}<span class="col-count">${kids.length}</span></div></div>${roomStaff.length?`<div class="col-staff">${roomStaff.map(s=>`<div class="staff-chip"><div class="staff-chip-dot" style="background:${room.farbe}"></div>${esc(s.displayName)}</div>`).join('')}</div>`:''}`;
       col.appendChild(header);
 
       // Scroll-Wrapper
@@ -679,7 +703,8 @@ function renderBoard() {
       else kids.forEach(k=>body.appendChild(renderCard(k)));
       wrap.appendChild(body);
       col.appendChild(wrap);
-      board.appendChild(col);
+
+      if (room.id === '0') board.appendChild(col); else colGroup.appendChild(col);
 
       sortables.push(Sortable.create(body, {
         group:'children', animation:200, ghostClass:'sortable-ghost', chosenClass:'sortable-chosen',
@@ -687,13 +712,26 @@ function renderBoard() {
         onAdd(evt) {
           const id=evt.item.dataset.id, newRoom=evt.to.dataset.room;
           const kind=State.kinder.find(k=>k.id===id); if(!kind)return;
-          kind.raumId=newRoom; save();
+          kind.raumId=newRoom;
+          if(newRoom!=='0') kind.neuImRaum=true; else kind.neuImRaum=false;
+          save(); spSaveKind(kind);
           const r=allRooms.find(r=>r.id===newRoom);
           toast(`${kind.vorname} → ${r?.label||'?'}`);
           setTimeout(renderBoard,0);
         }
       }));
     });
+
+    board.appendChild(colGroup);
+
+    // Spalten-Reihenfolge per Drag-and-Drop (Handle = ⠿ im Spalten-Header)
+    sortables.push(Sortable.create(colGroup, {
+      handle: '.col-drag-handle', animation:200, ghostClass:'sortable-ghost',
+      onEnd() {
+        const ids=[...colGroup.children].map(c=>c.dataset.room).filter(Boolean);
+        setRaumOrder(sh.id, ids);
+      }
+    }));
 
     // Trennlinie zwischen Schulhäusern
     if (gi < schulhausGruppen.length - 1) {
@@ -710,7 +748,13 @@ function renderBoard() {
 
 function renderCard(kind) {
   const card = document.createElement('div');
-  card.className = 'child-card'; card.dataset.id = kind.id;
+  card.className = 'child-card' + (kind.neuImRaum?' neu-im-raum':''); card.dataset.id = kind.id;
+  if (kind.neuImRaum) {
+    card.addEventListener('click', e => {
+      if (e.target.closest('.btn-eat') || e.target.closest('.warn-badge')) return;
+      clearNeuImRaum(kind.id);
+    });
+  }
   const tage = (kind.tage||[]).map(d=>DAYS[d]).filter(Boolean);
   card.innerHTML = `
     <div class="card-top">
@@ -781,6 +825,13 @@ function toggleEaten(id) {
   const kind=State.kinder.find(k=>k.id===id); if(!kind)return;
   kind.hatGegessen=!kind.hatGegessen; save(); renderBoard();
   toast(kind.hatGegessen?`${kind.vorname} hat gegessen ✓`:`${kind.vorname} zurückgesetzt`);
+}
+
+function clearNeuImRaum(id) {
+  const kind=State.kinder.find(k=>k.id===id); if(!kind||!kind.neuImRaum)return;
+  kind.neuImRaum=false; save();
+  spSaveKindField(kind,{NeuImRaum:false});
+  renderBoard();
 }
 
 function updateStats(kids) {
@@ -1693,7 +1744,7 @@ function spSave(key, val) {
 
 function initTheme(){
   document.querySelectorAll('.color-picker[data-theme]').forEach(p=>{p.addEventListener('input',()=>{State.theme[p.dataset.theme]=p.value;applyTheme();spSave('theme',State.theme);});});
-  document.getElementById('btn-reset-theme').addEventListener('click',()=>{if(!confirm('Design zurücksetzen?'))return;State.theme={accentColor:'#1a73e8',eatenColor:'#1e8c4a',pendingColor:'#d93025',warnColor:'#f29900',bgBase:'#f6f8fc',bgSurface:'#ffffff'};applyTheme();syncThemePickers();spSave('theme',State.theme);toast('Design zurückgesetzt');});
+  document.getElementById('btn-reset-theme').addEventListener('click',()=>{if(!confirm('Design zurücksetzen?'))return;State.theme={accentColor:'#1a73e8',eatenColor:'#1e8c4a',pendingColor:'#d93025',warnColor:'#f29900',bgBase:'#f6f8fc',bgSurface:'#ffffff',neuImRaumColor:'#ffa726'};applyTheme();syncThemePickers();spSave('theme',State.theme);toast('Design zurückgesetzt');});
 }
 function initBranding(){
   const update=()=>{State.branding.title=document.getElementById('branding-title').value.trim();State.branding.subtitle=document.getElementById('branding-subtitle').value.trim();State.branding.iconEmoji=document.getElementById('branding-emoji').value.trim()||'🍽️';State.branding.headerBg=document.getElementById('branding-bg-color').value;State.branding.headerText=document.getElementById('branding-text-color').value;applyBranding();spSave('branding',State.branding);};
